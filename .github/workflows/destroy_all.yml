@@ -1,0 +1,61 @@
+name: Destroy All (auth-serverless -> api -> db-infra -> k8s-infra)
+
+# Ordem inversa do deploy_all.yml — cada repo depende dos SSM Parameters
+# publicados pelos que vêm depois dele nesta lista.
+on:
+  workflow_dispatch:
+    inputs:
+      aws_access_key_id:
+        description: 'AWS Access Key ID (AWS Academy)'
+        required: true
+        type: string
+      aws_secret_access_key:
+        description: 'AWS Secret Access Key (AWS Academy)'
+        required: true
+        type: string
+      aws_session_token:
+        description: 'AWS Session Token (AWS Academy)'
+        required: true
+        type: string
+
+concurrency:
+  group: oficina-mecanica-deploy-all
+  cancel-in-progress: false
+
+jobs:
+  destroy:
+    name: Orchestrate Destroy
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.ORCHESTRATOR_PAT }}
+      ORG: FIAP-15SOAT-GabrielHelton
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Mask Sensitive Credentials
+        run: |
+          echo "::add-mask::${{ inputs.aws_access_key_id }}"
+          echo "::add-mask::${{ inputs.aws_secret_access_key }}"
+          echo "::add-mask::${{ inputs.aws_session_token }}"
+          echo "::add-mask::${{ secrets.ORCHESTRATOR_PAT }}"
+
+      - name: Destroy auth-serverless
+        run: |
+          .github/scripts/run_and_wait.sh auth-serverless cd_destroy.yml \
+            "${{ inputs.aws_access_key_id }}" "${{ inputs.aws_secret_access_key }}" "${{ inputs.aws_session_token }}"
+
+      - name: Destroy api
+        run: |
+          .github/scripts/run_and_wait.sh api cd_destroy.yml \
+            "${{ inputs.aws_access_key_id }}" "${{ inputs.aws_secret_access_key }}" "${{ inputs.aws_session_token }}"
+
+      - name: Destroy db-infra
+        run: |
+          .github/scripts/run_and_wait.sh db-infra cd_destroy.yml \
+            "${{ inputs.aws_access_key_id }}" "${{ inputs.aws_secret_access_key }}" "${{ inputs.aws_session_token }}"
+
+      - name: Destroy k8s-infra
+        run: |
+          .github/scripts/run_and_wait.sh k8s-infra cd_destroy.yml \
+            "${{ inputs.aws_access_key_id }}" "${{ inputs.aws_secret_access_key }}" "${{ inputs.aws_session_token }}"
