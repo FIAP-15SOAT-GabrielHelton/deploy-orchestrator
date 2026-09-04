@@ -46,5 +46,28 @@ if [ -z "$RUN_ID" ]; then
   exit 1
 fi
 
-echo "Aguardando conclusão da run ${RUN_ID} em ${FULL_REPO}..."
-gh run watch "$RUN_ID" --repo "$FULL_REPO" --exit-status
+echo "Aguardando conclusão do job principal da run ${RUN_ID} em ${FULL_REPO}..."
+
+# Aguardamos só o PRIMEIRO job da run (o único sem `needs:`, ou seja, o
+# trabalho real de deploy). Alguns workflows (ex: api/cd_deploy.yml) têm um
+# 2º job de autodestruição de segurança que dorme horas antes de destruir —
+# `gh run watch` esperaria a run inteira, incluindo esse sleep, travando a
+# orquestração sem necessidade.
+while true; do
+  JOB_INFO=$(gh run view "$RUN_ID" --repo "$FULL_REPO" --json jobs --jq '.jobs[0] | {name, status, conclusion}')
+  JOB_STATUS=$(echo "$JOB_INFO" | jq -r '.status')
+
+  if [ "$JOB_STATUS" = "completed" ]; then
+    JOB_NAME=$(echo "$JOB_INFO" | jq -r '.name')
+    JOB_CONCLUSION=$(echo "$JOB_INFO" | jq -r '.conclusion')
+    echo "Job '${JOB_NAME}' concluído com conclusion=${JOB_CONCLUSION}."
+
+    if [ "$JOB_CONCLUSION" != "success" ]; then
+      echo "::error::Job principal de ${FULL_REPO} falhou (conclusion=${JOB_CONCLUSION})."
+      exit 1
+    fi
+    break
+  fi
+
+  sleep 15
+done
